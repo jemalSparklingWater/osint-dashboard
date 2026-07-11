@@ -148,10 +148,18 @@ def home(request: Request):
     )
 
 
-# JOBS holds the live progress of each running scan, keyed by a random job id.
-# It lives in memory (a plain dict) — fine for a single-user local tool. The
-# browser polls /scan/status/<id> to watch these values change.
-JOBS: dict[str, dict] = {}
+class _Job:
+    """Adapter so run_scan can keep calling job.update(...) while the progress is
+    persisted to SQLite instead of an in-memory dict. In production the app runs
+    several worker processes, and the request that STARTS a scan may hit a
+    different worker than the one that POLLS its progress — a shared store (the
+    DB) is what lets them both see the same job, so status never says 'unknown'."""
+
+    def __init__(self, job_id: str):
+        self.job_id = job_id
+
+    def update(self, **fields):
+        database.update_job(self.job_id, **fields)
 
 
 def run_scan(job_id: str, domain: str):
@@ -160,7 +168,7 @@ def run_scan(job_id: str, domain: str):
     each step so the browser can show progress. Each source is a "stage"; we bump
     the percentage as we finish each one.
     """
-    job = JOBS[job_id]
+    job = _Job(job_id)
     try:
         domain = normalize_domain(domain)
         is_ip = _is_ip(domain)
@@ -257,8 +265,7 @@ def scan_start(domain: str = Form("")):
     finish). The real work runs in a background thread via run_scan.
     """
     job_id = uuid.uuid4().hex  # a random unique id like "3f9a1c..."
-    JOBS[job_id] = {"stage": "Starting…", "percent": 0, "done": False,
-                    "scan_id": None, "error": None}
+    database.create_job(job_id)
     threading.Thread(target=run_scan, args=(job_id, domain), daemon=True).start()
     return {"job_id": job_id}
 
@@ -266,7 +273,7 @@ def scan_start(domain: str = Form("")):
 @app.get("/scan/status/{job_id}")
 def scan_status(job_id: str):
     """The browser polls this to read a job's current progress (as JSON)."""
-    return JOBS.get(job_id, {"error": "unknown job", "done": True})
+    return database.get_job(job_id) or {"error": "unknown job", "done": True}
 
 
 @app.get("/scan/{scan_id}", response_class=HTMLResponse)

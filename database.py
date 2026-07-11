@@ -16,7 +16,9 @@ DB_FILE = "osint.db"
 
 def _connect():
     """Open a connection to the database file."""
-    conn = sqlite3.connect(DB_FILE)
+    # timeout lets concurrent workers wait briefly for a write lock instead of
+    # instantly erroring with "database is locked" under light concurrency.
+    conn = sqlite3.connect(DB_FILE, timeout=10)
     # This makes rows behave like dictionaries (row["domain"]) instead of
     # plain tuples (row[1]) — much easier to read.
     conn.row_factory = sqlite3.Row
@@ -43,8 +45,72 @@ def init_db():
         )
         """
     )
+    # Live scan-progress "jobs". We keep these in the DB (not in a memory dict)
+    # so it works in production where the app runs several worker processes: the
+    # request that STARTS a scan and the request that POLLS its progress can land
+    # on different workers, and a shared file lets them both see the same job.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS jobs (
+            job_id     TEXT PRIMARY KEY,
+            stage      TEXT,
+            percent    INTEGER,
+            done       INTEGER,
+            scan_id    INTEGER,
+            error      TEXT,
+            updated_at TEXT
+        )
+        """
+    )
     conn.commit()
     conn.close()
+
+
+# ---- live scan-progress jobs (shared across worker processes) ----
+_JOB_FIELDS = ("stage", "percent", "done", "scan_id", "error")
+
+
+def create_job(job_id: str):
+    """Register a new scan job in its starting state."""
+    conn = _connect()
+    conn.execute(
+        "INSERT OR REPLACE INTO jobs (job_id, stage, percent, done, scan_id, error, updated_at) "
+        "VALUES (?, 'Starting…', 0, 0, NULL, NULL, ?)",
+        (job_id, datetime.now().isoformat(timespec="seconds")),
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_job(job_id: str, **fields):
+    """Update whichever job fields were passed (stage/percent/done/scan_id/error)."""
+    cols = [f for f in fields if f in _JOB_FIELDS]
+    if not cols:
+        return
+    assignments = ", ".join(f"{c} = ?" for c in cols) + ", updated_at = ?"
+    values = [int(fields[c]) if c == "done" else fields[c] for c in cols]
+    values.append(datetime.now().isoformat(timespec="seconds"))
+    values.append(job_id)
+    conn = _connect()
+    conn.execute(f"UPDATE jobs SET {assignments} WHERE job_id = ?", values)
+    conn.commit()
+    conn.close()
+
+
+def get_job(job_id: str) -> dict | None:
+    """Read a job's current progress, or None if the id is unknown."""
+    conn = _connect()
+    row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return {
+        "stage": row["stage"],
+        "percent": row["percent"],
+        "done": bool(row["done"]),
+        "scan_id": row["scan_id"],
+        "error": row["error"],
+    }
 
 
 def save_scan(domain: str, results: dict) -> int:
