@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RECON — OSINT Surface Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg:#f4f6fa; --side:#ffffff;
+      --surface:#ffffff; --surface-2:#f7f9fc; --surface-3:#eef1f6;
+      --border:#e4e8ef; --border-soft:#eef1f6; --border-bright:#d3d9e3;
+      --ink:#111827; --ink-2:#475467; --ink-3:#667085; --ink-4:#98a2b3;
+      --accent:#2563eb; --accent-2:#1d4ed8; --accent-ink:#ffffff; --accent-soft:#eef4ff;
+      --high:#d92d20; --high-bg:#fef3f2;
+      --med:#c2690a;  --med-bg:#fff8ec;
+      --low:#067a4b;  --low-bg:#ecfdf3;
+      --info:#2563eb;
+      --sh-sm:0 1px 2px rgba(16,24,40,.06);
+      --sh:0 1px 3px rgba(16,24,40,.09), 0 1px 2px rgba(16,24,40,.05);
+      --sh-md:0 6px 16px -4px rgba(16,24,40,.1), 0 3px 6px -3px rgba(16,24,40,.06);
+      --mono:"JetBrains Mono", ui-monospace, monospace;
+      --disp:"Inter", system-ui, sans-serif;
+      --sans:"Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --r:12px; --r-sm:8px;
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; font-family:var(--sans); background:var(--bg); color:var(--ink);
+      font-size:14.5px; line-height:1.55; -webkit-font-smoothing:antialiased; }
+    a { color:inherit; text-decoration:none; }
+    ::selection { background:rgba(37,99,235,.18); }
+    .app { display:grid; grid-template-columns:248px minmax(0,1fr); min-height:100vh; }
+    .sidebar { position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+      background:var(--side); border-right:1px solid var(--border); padding:20px 14px; display:flex; flex-direction:column; gap:20px; }
+    .brand { display:flex; align-items:center; gap:11px; padding:2px 6px 4px; }
+    .brand .logo { width:34px; height:34px; flex:0 0 auto; }
+    .brand-name { font-family:var(--disp); font-weight:700; font-size:1.15rem; letter-spacing:.1em; line-height:1; color:var(--ink); }
+    .brand-sub { font-family:var(--mono); font-size:.55rem; letter-spacing:.26em; color:var(--ink-4); text-transform:uppercase; margin-top:5px; }
+    .side-cta { display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 12px;
+      border-radius:var(--r-sm); font-weight:600; font-size:.85rem; color:var(--accent-ink); background:var(--accent);
+      box-shadow:var(--sh-sm); transition:background .15s, transform .05s; }
+    .side-cta:hover { background:var(--accent-2); }
+    .side-cta:active { transform:translateY(1px); }
+    .side-lbl { font-family:var(--mono); font-size:.58rem; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-4); padding:0 6px 6px; }
+    .side-nav { display:flex; flex-direction:column; gap:1px; }
+    .side-nav a { position:relative; display:flex; align-items:center; gap:11px; padding:9px 11px;
+      border-radius:var(--r-sm); color:var(--ink-2); font-size:.87rem; font-weight:500; transition:background .14s, color .14s; }
+    .side-nav a .ic { color:var(--ink-4); transition:color .14s; }
+    .side-nav a:hover { background:var(--surface-2); color:var(--ink); }
+    .side-nav a:hover .ic { color:var(--accent); }
+    .recent-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1px; }
+    .recent-list a { display:block; padding:8px 11px; border-radius:var(--r-sm); transition:background .14s; }
+    .recent-list a:hover { background:var(--surface-2); }
+    .rc-dom { display:block; font-size:.83rem; font-weight:500; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .rc-meta { display:block; font-family:var(--mono); font-size:.65rem; color:var(--ink-4); margin-top:2px; }
+    .side-foot { margin-top:auto; display:flex; align-items:center; gap:8px; padding:12px 8px 2px;
+      font-family:var(--mono); font-size:.64rem; letter-spacing:.1em; color:var(--ink-3); text-transform:uppercase; border-top:1px solid var(--border); }
+    .live-dot { width:7px; height:7px; border-radius:50%; background:var(--low); box-shadow:0 0 0 3px rgba(6,122,75,.14); }
+    .main { min-width:0; display:flex; flex-direction:column; background:var(--bg); }
+    .topbar { position:sticky; top:0; z-index:20; padding:17px clamp(16px,2.4vw,28px);
+      background:rgba(244,246,250,.85); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); }
+    .tb-row { display:flex; align-items:flex-end; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:14px; }
+    .tb-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .tb-eyebrow { font-family:var(--mono); font-size:.6rem; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:6px; }
+    .tb-title { font-family:var(--disp); font-weight:700; font-size:1.5rem; letter-spacing:-.01em; color:var(--ink); word-break:break-all; }
+    .target-chip { display:inline-flex; align-items:center; gap:8px; padding:6px 12px; background:var(--surface);
+      border:1px solid var(--border); border-radius:8px; font-family:var(--mono); font-size:.82rem; color:var(--ink-2); box-shadow:var(--sh-sm); }
+    .target-chip .ic { color:var(--accent); }
+    .target-chip em { font-style:normal; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; color:var(--med);
+      border-left:1px solid var(--border); padding-left:8px; margin-left:2px; }
+    form#scanForm { display:flex; gap:9px; }
+    .field { position:relative; flex:1 1 220px; min-width:0; }
+    .field > .ic { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--ink-4); pointer-events:none; }
+    input[type=text] { width:100%; padding:11px 14px 11px 39px; font-family:var(--mono); font-size:.9rem; color:var(--ink);
+      background:var(--surface); border:1px solid var(--border-bright); border-radius:var(--r-sm); outline:none; box-shadow:var(--sh-sm); transition:border-color .15s, box-shadow .15s; }
+    input[type=text]::placeholder { color:var(--ink-4); }
+    input[type=text]:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+    button { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; padding:11px 18px;
+      font-family:var(--sans); font-weight:600; font-size:.87rem; color:var(--accent-ink); background:var(--accent);
+      border:none; border-radius:var(--r-sm); cursor:pointer; box-shadow:var(--sh-sm); transition:background .15s, transform .05s; }
+    button:hover { background:var(--accent-2); }
+    button:active { transform:translateY(1px); }
+    #progress { display:none; margin:14px clamp(16px,2.4vw,28px) 0; padding:14px 16px; background:var(--surface);
+      border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--sh); }
+    #progressTrack { position:relative; height:6px; border-radius:99px; overflow:hidden; background:var(--surface-3); }
+    #progressFill { height:100%; width:0%; border-radius:99px; background:var(--accent); transition:width .3s ease; }
+    #progressText { margin-top:10px; font-family:var(--mono); font-size:.78rem; color:var(--ink-2); }
+    #progressText::before { content:"→ "; color:var(--accent); }
+    .content { padding:clamp(16px,2.4vw,28px); display:grid; grid-template-columns:1fr; gap:14px; align-content:start; }
+    @media (min-width:1120px) { .content { grid-template-columns:1fr 1fr; } }
+    .card--full { grid-column:1 / -1; }
+    .card { position:relative; background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
+      padding:20px; min-width:0; box-shadow:var(--sh); transition:box-shadow .16s, border-color .16s; }
+    .card:hover { box-shadow:var(--sh-md); border-color:var(--border-bright); }
+    .card-h { display:flex; align-items:center; gap:11px; margin-bottom:15px; flex-wrap:wrap; }
+    .card-h .hico { display:grid; place-items:center; width:30px; height:30px; flex:0 0 auto; border-radius:8px;
+      color:var(--accent); background:var(--accent-soft); }
+    .card h2 { margin:0; font-family:var(--disp); font-weight:600; font-size:.98rem; letter-spacing:-.005em; color:var(--ink); }
+    .count { font-family:var(--mono); font-size:.71rem; color:var(--ink-4); font-weight:400; margin-left:auto; }
+    .muted { color:var(--ink-3); }
+    .card p { margin:.5rem 0; color:var(--ink-2); }
+    .card p:first-child { margin-top:0; }
+    ul { margin:.3rem 0 0; padding-left:0; list-style:none; display:flex; flex-direction:column; gap:4px; }
+    li { font-family:var(--mono); font-size:.81rem; color:var(--ink-2); word-break:break-all; padding-left:15px; position:relative; }
+    li::before { content:""; position:absolute; left:2px; top:.62em; width:4px; height:4px; border-radius:50%; background:var(--border-bright); }
+    a.link, .card a:not(.btn) { color:var(--accent); font-weight:500; }
+    .card a:not(.btn):hover { color:var(--accent-2); text-decoration:underline; }
+    table { border-collapse:collapse; width:100%; font-size:.85rem; }
+    td { padding:9px 10px; border-bottom:1px solid var(--border-soft); vertical-align:top; word-break:break-word; }
+    tr:last-child td { border-bottom:none; }
+    td.key { color:var(--ink-3); font-family:var(--mono); font-size:.75rem; width:120px; white-space:nowrap; }
+    td.num, .mono { font-family:var(--mono); }
+    .stat-row { grid-column:1 / -1; display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
+    .stat { display:flex; align-items:center; gap:13px; padding:16px 18px; background:var(--surface);
+      border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--sh); transition:box-shadow .16s, border-color .16s; }
+    .stat:hover { box-shadow:var(--sh-md); border-color:var(--border-bright); }
+    .stat-ic { display:grid; place-items:center; width:38px; height:38px; flex:0 0 auto; border-radius:10px; color:var(--accent); background:var(--accent-soft); }
+    .stat-num { font-family:var(--disp); font-weight:700; font-size:1.55rem; line-height:1; letter-spacing:-.01em; color:var(--ink); }
+    .stat-lbl { font-size:.74rem; color:var(--ink-3); margin-top:4px; }
+    .stat--danger .stat-ic { color:var(--high); background:var(--high-bg); }
+    .stat--danger .stat-num { color:var(--high); }
+    .hero-grid { display:grid; grid-template-columns:auto 1fr; gap:28px; align-items:center; }
+    @media (max-width:640px) { .hero-grid { grid-template-columns:1fr; justify-items:center; text-align:center; } }
+    .hero-gauge { display:flex; flex-direction:column; align-items:center; gap:13px; }
+    .gauge { --val:0; --gc:var(--accent); width:148px; height:148px; border-radius:50%;
+      background:conic-gradient(var(--gc) calc(var(--val)*3.6deg), var(--surface-3) 0); display:grid; place-items:center; position:relative;
+      animation:gaugeIn .9s cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes gaugeIn { from{ background:conic-gradient(var(--gc) 0deg, var(--surface-3) 0); } }
+    .gauge::after { content:""; position:absolute; inset:12px; border-radius:50%; background:var(--surface); box-shadow:var(--sh-sm); }
+    .gauge-num { position:relative; z-index:1; font-family:var(--disp); font-weight:700; font-size:2.4rem; line-height:1; letter-spacing:-.02em; color:var(--gc); }
+    .gauge-sub { position:relative; z-index:1; font-family:var(--mono); font-size:.65rem; color:var(--ink-3); margin-top:3px; }
+    .risk-badge { font-family:var(--mono); font-size:.7rem; letter-spacing:.12em; text-transform:uppercase; font-weight:600;
+      padding:5px 12px; border-radius:99px; color:var(--gc, var(--accent));
+      border:1px solid color-mix(in srgb, currentColor 30%, transparent); background:color-mix(in srgb, currentColor 9%, transparent); }
+    .hero-summary { font-size:1rem; color:var(--ink) !important; margin-top:0; }
+    .findings { display:flex; flex-direction:column; gap:8px; margin:14px 0 4px; }
+    .context { display:flex; gap:8px; align-items:flex-start; font-size:.85rem; color:var(--ink-3) !important; }
+    .context .ic { color:var(--ink-4); flex:0 0 auto; margin-top:2px; }
+    .risk-High { color:var(--high); } .gauge.risk-High { --gc:var(--high); }
+    .risk-Medium { color:var(--med); } .gauge.risk-Medium { --gc:var(--med); }
+    .risk-Low { color:var(--low); } .gauge.risk-Low { --gc:var(--low); }
+    .risk-Unknown { color:var(--ink-3); } .gauge.risk-Unknown { --gc:var(--ink-4); }
+    .finding { display:flex; gap:11px; align-items:flex-start; padding:11px 14px; background:var(--surface-2);
+      border:1px solid var(--border-soft); border-left-width:2px; border-radius:var(--r-sm); font-size:.86rem; color:var(--ink-2); }
+    .finding::before { content:""; flex:0 0 auto; width:6px; height:6px; border-radius:50%; margin-top:6px; background:var(--ink-4); }
+    .sev-high { border-left-color:var(--high); } .sev-high::before { background:var(--high); }
+    .sev-medium { border-left-color:var(--med); } .sev-medium::before { background:var(--med); }
+    .sev-low { border-left-color:var(--low); } .sev-low::before { background:var(--low); }
+    .removed { display:flex; gap:8px; align-items:center; font-size:.83rem; color:var(--ink-3) !important; }
+    .score-move { display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:.88rem;
+      padding:8px 12px; background:var(--surface-2); border:1px solid var(--border-soft); border-radius:var(--r-sm); }
+    .score-move strong { color:var(--ink); }
+    .chip { display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:.71rem; font-weight:600; letter-spacing:.01em;
+      padding:3px 9px; border-radius:6px; border:1px solid color-mix(in srgb, currentColor 24%, transparent); }
+    .chip .ic { width:12px; height:12px; }
+    .chip.high { color:var(--high); background:var(--high-bg); }
+    .chip.medium { color:var(--med); background:var(--med-bg); }
+    .chip.low { color:var(--low); background:var(--low-bg); }
+    .chip.unknown { color:var(--ink-3); background:var(--surface-3); border-color:var(--border-bright); }
+    .status-row { display:flex; gap:11px; padding:10px 0; align-items:flex-start; flex-wrap:wrap; border-bottom:1px solid var(--border-soft); }
+    .status-row:last-child { border-bottom:none; }
+    .status-row .ic { flex:0 0 auto; margin-top:1px; }
+    .status-row .lbl { font-weight:500; font-size:.86rem; width:190px; flex:0 0 auto; color:var(--ink); }
+    .status-row .muted { flex:1 1 160px; font-size:.84rem; }
+    .st-ok { color:var(--low); } .st-warn { color:var(--med); } .st-fail { color:var(--high); } .st-info { color:var(--ink-3); }
+    .alert { grid-column:1/-1; display:block; padding:14px 16px; border-radius:var(--r); background:var(--high-bg);
+      border:1px solid color-mix(in srgb, var(--high) 28%, transparent); color:var(--ink-2); font-weight:500; }
+    .alert .alert-h { display:flex; align-items:center; gap:9px; font-weight:600; color:var(--high); }
+    .alert ul { margin-top:9px; }
+    .banner { grid-column:1/-1; display:flex; align-items:center; gap:9px; padding:11px 15px; border-radius:var(--r);
+      background:var(--surface); border:1px solid var(--border); box-shadow:var(--sh-sm); font-family:var(--mono); font-size:.82rem; color:var(--ink-2); }
+    .banner .ic { color:var(--accent); }
+    .note { display:flex; gap:9px; align-items:flex-start; margin-top:12px !important; font-size:.8rem; color:var(--ink-3) !important; }
+    .note .ic { color:var(--med); flex:0 0 auto; margin-top:1px; }
+    .src { font-family:var(--mono); font-size:.71rem; color:var(--ink-4); margin-top:12px !important; }
+    .btn-sm { padding:6px 12px; font-size:.76rem; font-family:var(--sans); font-weight:500; background:var(--surface); color:var(--ink-2);
+      border:1px solid var(--border-bright); border-radius:var(--r-sm); box-shadow:var(--sh-sm); }
+    .btn-sm:hover { border-color:var(--accent); color:var(--accent); }
+    .empty { grid-column:1/-1; text-align:center; padding:60px 20px 44px; display:flex; flex-direction:column; align-items:center; gap:14px; }
+    .empty .logo { width:72px; height:72px; }
+    .empty h2 { font-family:var(--disp); font-weight:700; font-size:1.55rem; letter-spacing:-.01em; margin:6px 0 0; color:var(--ink); }
+    .empty p { max-width:540px; color:var(--ink-2); }
+    .empty-tags { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:6px; }
+    .empty-tags span { font-family:var(--mono); font-size:.72rem; color:var(--ink-3); padding:5px 11px;
+      border:1px solid var(--border); border-radius:99px; background:var(--surface); box-shadow:var(--sh-sm); }
+    canvas { max-width:100%; }
+    :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; } #progressFill{ transition:none; } }
+    @media (max-width:920px) {
+      .app { grid-template-columns:1fr; }
+      .sidebar { position:sticky; top:0; z-index:30; height:auto; flex-direction:row; flex-wrap:wrap; align-items:center; gap:12px;
+        padding:12px 16px; background:rgba(255,255,255,.96); backdrop-filter:blur(12px); border-right:none; border-bottom:1px solid var(--border); }
+      .brand { margin-right:auto; }
+      .brand .logo { width:30px; height:30px; }
+      .brand-name { font-size:1rem; }
+      .side-cta { order:0; padding:9px 14px; font-size:.82rem; }
+      .side-lbl, .side-nav, .side-foot, .side-sec { display:none; }
+      .topbar { top:55px; }
+    }
+    @media (max-width:560px) {
+      body { font-size:14px; }
+      .topbar { padding:13px 15px; }
+      .tb-title { font-size:1.2rem; }
+      .target-chip { display:none; }
+      form#scanForm { flex-wrap:wrap; gap:8px; }
+      form#scanForm .field { flex:1 1 100%; }
+      form#scanForm button { flex:1 1 100%; justify-content:center; }
+      #progress { margin:12px 15px 0; }
+      .content { padding:15px; gap:12px; }
+      .card { padding:16px; }
+      .stat-row { grid-template-columns:1fr 1fr; gap:10px; }
+      .stat-num { font-size:1.35rem; }
+      .hero-grid { grid-template-columns:1fr; gap:18px; justify-items:stretch; text-align:left; }
+      .hero-gauge { flex-direction:row; align-items:center; gap:16px; justify-content:flex-start; }
+      .gauge { width:118px; height:118px; }
+      .gauge-num { font-size:1.85rem; }
+      .status-row .lbl, .status-row .muted { width:100%; flex:1 1 100%; }
+      #sec-cve table, .card--full table { display:block; overflow-x:auto; white-space:nowrap; }
+      #sec-cve td, .card--full td { white-space:normal; }
+    }
+  </style>
+</head>
+<body>
+
+{# ---- Icon macro: feather-style inline SVGs, one dict, stroke=currentColor ---- #}
+{% macro ic(name, size=16) -%}
+<svg class="ic" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if name=='search' %}<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+{%- elif name=='activity' %}<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+{%- elif name=='bug' %}<rect x="8" y="6" width="8" height="14" rx="4"/><path d="M12 6V3M9 4l1.5 2M15 4l-1.5 2M8 10H4M8 14H3M8 18l-3 2M16 10h4M16 14h5M16 18l3 2"/>
+{%- elif name=='server' %}<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+{%- elif name=='share' %}<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.7" x2="15.4" y2="6.3"/><line x1="8.6" y1="13.3" x2="15.4" y2="17.7"/>
+{%- elif name=='globe' %}<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+{%- elif name=='file' %}<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+{%- elif name=='mail' %}<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>
+{%- elif name=='cpu' %}<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/>
+{%- elif name=='clock' %}<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+{%- elif name=='pie' %}<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
+{%- elif name=='lock' %}<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+{%- elif name=='info' %}<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+{%- elif name=='alert' %}<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+{%- elif name=='check' %}<polyline points="20 6 9 17 4 12"/>
+{%- elif name=='x' %}<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+{%- elif name=='trend-up' %}<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+{%- elif name=='target' %}<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+{%- elif name=='redirect' %}<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>
+{%- endif %}</svg>
+{%- endmacro %}
+
+<div class="app">
+  <aside class="sidebar">
+    <a class="brand" href="/">
+      <svg class="logo" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <path d="M20 3 33.9 11v18L20 37 6.1 29V11z" stroke="url(#lg)" stroke-width="1.6" fill="rgba(37,99,235,.08)"/>
+        <circle cx="20" cy="20" r="7" stroke="url(#lg)" stroke-width="1.6"/>
+        <path d="M20 8v5M20 27v5M8 20h5M27 20h5" stroke="url(#lg)" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="20" cy="20" r="2.1" fill="url(#lg)"/>
+        <defs><linearGradient id="lg" x1="4" y1="3" x2="36" y2="37"><stop stop-color="#2563eb"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient></defs>
+      </svg>
+      <span><span class="brand-name">RECON</span><span class="brand-sub">OSINT Suite</span></span>
+    </a>
+
+    <a class="side-cta" href="/">{{ ic('search') }} New scan</a>
+
+    {% if results %}
+    <nav class="side-nav">
+      <div class="side-lbl">Report</div>
+      <a href="#sec-risk">{{ ic('activity') }} Risk assessment</a>
+      <a href="#sec-cve">{{ ic('bug') }} Vulnerabilities</a>
+      <a href="#sec-shodan">{{ ic('server') }} Ports &amp; services</a>
+      <a href="#sec-subs">{{ ic('share') }} Subdomains</a>
+      <a href="#sec-dns">{{ ic('globe') }} DNS records</a>
+      <a href="#sec-whois">{{ ic('file') }} WHOIS</a>
+    </nav>
+    {% endif %}
+
+    {% if recent %}
+    <div class="side-sec">
+      <div class="side-lbl">Recent scans</div>
+      <ul class="recent-list">
+        {% for scan in recent %}
+          <li><a href="/scan/{{ scan.id }}">
+            <span class="rc-dom">{{ scan.domain }}</span>
+            <span class="rc-meta">#{{ scan.id }} · {{ scan.scanned_at }}</span>
+          </a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="side-foot"><span class="live-dot"></span> Engine operational</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="tb-row">
+        <div>
+          <div class="tb-eyebrow">{% if results %}Reconnaissance report{% else %}OSINT surface intelligence{% endif %}</div>
+          <div class="tb-title">{% if domain %}{{ domain }}{% else %}New scan{% endif %}</div>
+        </div>
+        <div class="tb-actions">
+          {% if domain %}
+            <span class="target-chip">{{ ic('target') }} <span class="mono">{{ domain }}</span>{% if viewing_past %}<em>saved</em>{% endif %}</span>
+          {% endif %}
+        </div>
+      </div>
+      <form id="scanForm" action="/scan/start" method="post">
+        <div class="field">{{ ic('search') }}
+          <input type="text" name="domain" placeholder="example.com   ·   198.51.100.20" required>
+        </div>
+        <button type="submit">{{ ic('activity') }} Run scan</button>
+      </form>
+    </header>
+
+    <div id="progress">
+      <div id="progressTrack"><div id="progressFill"></div></div>
+      <div id="progressText">Starting…</div>
+    </div>
+
+    <div class="content">
+
+    {% if not results %}
+      <div class="empty">
+        <svg class="logo" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <path d="M20 3 33.9 11v18L20 37 6.1 29V11z" stroke="url(#lg2)" stroke-width="1.4" fill="rgba(37,99,235,.06)"/>
+          <circle cx="20" cy="20" r="7" stroke="url(#lg2)" stroke-width="1.4"/>
+          <path d="M20 8v5M20 27v5M8 20h5M27 20h5" stroke="url(#lg2)" stroke-width="1.4" stroke-linecap="round"/>
+          <circle cx="20" cy="20" r="2.1" fill="url(#lg2)"/>
+          <defs><linearGradient id="lg2" x1="4" y1="3" x2="36" y2="37"><stop stop-color="#2563eb"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient></defs>
+        </svg>
+        <h2>Map any domain's attack surface</h2>
+        <p>Enter a domain or IP above to gather subdomains, DNS, WHOIS, open ports and services, known vulnerabilities, Cloudflare-origin discovery, and an AI-assessed risk score — all from public sources.</p>
+        <div class="empty-tags">
+          <span>crt.sh</span><span>Shodan</span><span>WHOIS</span><span>NVD CVEs</span>
+          <span>Cloudflare bypass</span><span>AI analysis</span>
+        </div>
+      </div>
+    {% else %}
+
+      {% if viewing_past %}
+        <p class="banner">{{ ic('clock') }} Viewing a saved scan from {{ viewing_past }}.</p>
+      {% endif %}
+
+      {% if warnings %}
+        <div class="alert">
+          <div class="alert-h">{{ ic('alert') }} This scan looks incomplete — results below may be missing.</div>
+          <ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+        </div>
+      {% endif %}
+
+      {# ---- KPI stat tiles ---- #}
+      <div class="stat-row">
+        <div class="stat"><span class="stat-ic">{{ ic('share') }}</span>
+          <div><div class="stat-num">{{ results.subdomains | length }}</div><div class="stat-lbl">Subdomains</div></div></div>
+        <div class="stat"><span class="stat-ic">{{ ic('server') }}</span>
+          <div><div class="stat-num">{{ (results.shodan.ports or []) | length }}</div><div class="stat-lbl">Open ports</div></div></div>
+        <div class="stat {% if results.cves %}stat--danger{% endif %}"><span class="stat-ic">{{ ic('bug') }}</span>
+          <div><div class="stat-num">{{ results.cves | length }}</div><div class="stat-lbl">Candidate CVEs</div></div></div>
+        <div class="stat"><span class="stat-ic">{{ ic('mail') }}</span>
+          <div><div class="stat-num">{{ results.emails | length }}</div><div class="stat-lbl">Exposed emails</div></div></div>
+      </div>
+
+      {% if results.redirect and results.redirect.redirected %}
+      <div class="card card--full">
+        <div class="card-h"><span class="hico">{{ ic('redirect') }}</span><h2>Redirect detected</h2></div>
+        <p><strong>{{ domain }}</strong> redirects to <strong>{{ results.redirect.final_domain }}</strong>
+          (<a href="{{ results.redirect.final_url }}" target="_blank" rel="noopener">{{ results.redirect.final_url }}</a>).
+          This scan is of {{ domain }} itself — scan the target to analyze it.</p>
+        <button type="button" class="btn-sm" onclick="scanDomain('{{ results.redirect.final_domain }}')" style="margin-top:8px;">Scan {{ results.redirect.final_domain }}</button>
+      </div>
+      {% endif %}
+
+      {# ---- Risk assessment ---- #}
+      {% if results.risk %}
+      <div class="card card--full" id="sec-risk">
+        <div class="card-h"><span class="hico">{{ ic('activity') }}</span><h2>Risk assessment</h2></div>
+        <div class="hero-grid">
+          <div class="hero-gauge">
+            {% if results.risk.score is not none %}
+              <div class="gauge risk-{{ results.risk.level }}" style="--val: {{ results.risk.score }}">
+                <div class="gauge-num">{{ results.risk.score }}</div>
+                <div class="gauge-sub">/ 100</div>
+              </div>
+            {% else %}
+              <div class="gauge risk-Unknown" style="--val: 0">
+                <div class="gauge-num" style="font-size:1.5rem;">N/A</div>
+                <div class="gauge-sub">unscored</div>
+              </div>
+            {% endif %}
+            <span class="risk-badge risk-{{ results.risk.level }}">{{ results.risk.level }} risk</span>
+          </div>
+          <div class="hero-body">
+            <p class="hero-summary">{{ results.risk.summary }}</p>
+            {% if results.risk.findings %}
+              <div class="findings">
+                {% for f in results.risk.findings %}
+                  <div class="finding sev-{{ f.severity }}">{{ f.text }}</div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="muted">No dangerous exposure detected.</p>
+            {% endif %}
+            {% for c in results.risk.context %}
+              <p class="context">{{ ic('info') }} {{ c }}</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if results.ai_summary %}
+      <div class="card card--full" id="sec-ai">
+        <div class="card-h"><span class="hico">{{ ic('cpu') }}</span><h2>AI analyst summary</h2></div>
+        <p style="line-height:1.6;color:var(--ink) !important;">{{ results.ai_summary }}</p>
+      </div>
+      {% endif %}
+
+      {% if status %}
+      <div class="card card--full" id="sec-status">
+        <div class="card-h"><span class="hico">{{ ic('check') }}</span><h2>Scan status</h2><span class="count">what worked, what didn't</span></div>
+        {% for item in status %}
+          <div class="status-row">
+            <span class="st-{{ item.state }}">
+              {%- if item.state=='ok' %}{{ ic('check') }}{% elif item.state=='warn' %}{{ ic('alert') }}{% elif item.state=='fail' %}{{ ic('x') }}{% else %}{{ ic('info') }}{% endif -%}
+            </span>
+            <span class="lbl">{{ item.label }}</span>
+            <span class="muted">{{ item.detail }}</span>
+          </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if diff %}
+      <div class="card card--full">
+        <div class="card-h"><span class="hico">{{ ic('clock') }}</span><h2>Changes since last scan</h2><span class="count">{{ diff.since }}</span></div>
+        {% if not diff.any and diff.prev_score == diff.now_score %}
+          <p class="muted">No changes since the previous scan.</p>
+        {% else %}
+          {% if diff.prev_score is not none and diff.now_score is not none and diff.prev_score != diff.now_score %}
+            <p class="score-move">
+              {% if diff.now_score > diff.prev_score %}<span class="st-fail">{{ ic('trend-up') }}</span>{% else %}<span class="st-ok">{{ ic('check') }}</span>{% endif %}
+              Risk score <strong>{{ diff.prev_score }} → {{ diff.now_score }}</strong>
+              {% if diff.now_score > diff.prev_score %}<span class="risk-High">worse — more exposed</span>{% else %}<span class="risk-Low">better — less exposed</span>{% endif %}
+            </p>
+          {% endif %}
+          <div class="findings" style="margin-top:12px;">
+            {% for s in diff.new_ports %}<div class="finding sev-high">New open port: <span class="mono">{{ s }}</span></div>{% endfor %}
+            {% for s in diff.new_subdomains %}<div class="finding sev-low">New subdomain: <span class="mono">{{ s }}</span></div>{% endfor %}
+            {% for s in diff.new_emails %}<div class="finding sev-low">New exposed email: <span class="mono">{{ s }}</span></div>{% endfor %}
+            {% for s in diff.closed_ports %}<div class="finding sev-low">Port closed: <span class="mono">{{ s }}</span></div>{% endfor %}
+          </div>
+          {% for s in diff.removed_subdomains %}<p class="removed">{{ ic('x') }} Removed subdomain: <span class="mono">{{ s }}</span></p>{% endfor %}
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ---- Charts ---- #}
+      <div class="card">
+        <div class="card-h"><span class="hico">{{ ic('pie') }}</span><h2>Findings overview</h2></div>
+        <div style="max-width:280px;margin:auto;"><canvas id="findingsChart"></canvas></div>
+      </div>
+
+      {% if trend and trend | length >= 2 %}
+      <div class="card">
+        <div class="card-h"><span class="hico">{{ ic('activity') }}</span><h2>Risk trend</h2><span class="count">{{ trend | length }} scans</span></div>
+        <canvas id="trendChart"></canvas>
+      </div>
+      {% endif %}
+
+      {# ---- Origin servers (Cloudflare bypass) ---- #}
+      {% if results.direct_ips %}
+      <div class="card card--full">
+        <div class="card-h"><span class="hico" style="color:var(--med);background:var(--med-bg);">{{ ic('lock') }}</span><h2>Possible origin servers</h2><span class="count">subdomains bypassing Cloudflare</span></div>
+        <p class="muted">These subdomains resolve to non-Cloudflare IPs. Each was tested directly — a confirmed match means the CDN bypass works.</p>
+        <table>
+          {% for sub, info in results.direct_ips.items() %}
+            <tr>
+              <td class="key num">{{ info.ip }}</td>
+              <td class="mono">{{ sub }}</td>
+              <td style="width:170px;">
+                {% if info.status == 'confirmed' %}<span class="chip low">{{ ic('check') }} Origin confirmed</span>
+                {% elif info.status == 'maybe' %}<span class="chip medium">{{ ic('alert') }} Maybe</span>
+                {% else %}<span class="chip unknown">{{ ic('x') }} Not the origin</span>{% endif %}
+              </td>
+              <td class="muted" style="font-size:.82rem;">{{ info.detail }}</td>
+              <td style="width:90px;"><button type="button" class="btn-sm" onclick="scanDomain('{{ info.ip }}')">Scan IP</button></td>
+            </tr>
+          {% endfor %}
+        </table>
+      </div>
+      {% endif %}
+
+      {# ---- Shodan ports/services ---- #}
+      <div class="card" id="sec-shodan">
+        <div class="card-h"><span class="hico">{{ ic('server') }}</span><h2>Ports &amp; services</h2><span class="count">Shodan</span></div>
+        {% if results.shodan.error %}
+          <p class="muted">{{ results.shodan.error }}</p>
+        {% elif results.shodan.note %}
+          <p class="muted"><span class="mono">{{ results.shodan.ip }}</span> — {{ results.shodan.note }}</p>
+        {% else %}
+          <table>
+            <tr><td class="key">IP</td><td class="num">{{ results.shodan.ip }}</td></tr>
+            <tr><td class="key">Org</td><td>{{ results.shodan.org }}</td></tr>
+            <tr><td class="key">OS</td><td>{{ results.shodan.os }}</td></tr>
+            <tr><td class="key">Open ports</td><td class="num">{{ results.shodan.ports | join(', ') }}</td></tr>
+          </table>
+          {% if results.shodan.services %}
+            <p style="margin-top:12px;"><strong>Services</strong></p>
+            <ul>{% for s in results.shodan.services %}<li>{{ s }}</li>{% endfor %}</ul>
+          {% endif %}
+          {% if results.shodan.source %}<p class="src">Source: {{ results.shodan.source }}</p>{% endif %}
+        {% endif %}
+      </div>
+
+      {# ---- Subdomains ---- #}
+      <div class="card" id="sec-subs">
+        <div class="card-h"><span class="hico">{{ ic('share') }}</span><h2>Subdomains</h2><span class="count">{{ results.subdomains | length }} found</span></div>
+        {% if results.subdomains_error %}
+          <p class="note">{{ ic('alert') }} Both certificate sources (crt.sh + certspotter) failed ({{ results.subdomains_error }}). Try scanning again.</p>
+        {% endif %}
+        {% if results.subdomains %}
+          <ul>{% for sub in results.subdomains %}<li>{{ sub }}</li>{% endfor %}</ul>
+        {% else %}
+          <p class="muted">None found.</p>
+        {% endif %}
+        {% if results.subdomains_source %}<p class="src">Source: {{ results.subdomains_source }}</p>{% endif %}
+      </div>
+
+      {# ---- Vulnerabilities ---- #}
+      {% if results.cves %}
+      <div class="card card--full" id="sec-cve">
+        <div class="card-h"><span class="hico" style="color:var(--high);background:var(--high-bg);">{{ ic('bug') }}</span><h2>Possible vulnerabilities</h2><span class="count">{{ results.cves | length }} candidate CVEs · AI-rated</span></div>
+        <table>
+          {% for c in results.cves %}
+            <tr>
+              <td class="key"><a href="https://nvd.nist.gov/vuln/detail/{{ c.id }}" target="_blank" rel="noopener">{{ c.id }}</a></td>
+              <td style="width:88px;">
+                <span class="chip {% if c.score and c.score >= 9 %}high{% elif c.score and c.score >= 7 %}medium{% else %}low{% endif %}">CVSS {{ c.score if c.score is not none else '?' }}</span>
+              </td>
+              <td style="width:130px;">
+                {% set conf = c.confidence | default('unrated') %}
+                <span class="chip {% if conf=='high' %}high{% elif conf=='medium' %}medium{% elif conf=='low' %}low{% else %}unknown{% endif %}" title="{{ c.confidence_reason }}">{{ conf | capitalize }} conf.</span>
+              </td>
+              <td class="muted">{{ c.desc }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+        <p class="note">{{ ic('alert') }} These are <strong>possible</strong> matches from network fingerprints, not confirmed — verify before acting. Only High/Medium-confidence matches affect the risk score. Source: NVD.</p>
+      </div>
+      {% endif %}
+
+      {# ---- Exposed emails ---- #}
+      <div class="card">
+        <div class="card-h"><span class="hico">{{ ic('mail') }}</span><h2>Exposed emails</h2><span class="count">{{ results.emails | length }} found</span></div>
+        {% if results.emails %}
+          <ul>{% for email in results.emails %}<li>{{ email }}</li>{% endfor %}</ul>
+        {% else %}
+          <p class="muted">None found in certificate data.</p>
+        {% endif %}
+      </div>
+
+      {# ---- DNS ---- #}
+      <div class="card" id="sec-dns">
+        <div class="card-h"><span class="hico">{{ ic('globe') }}</span><h2>DNS records</h2></div>
+        {% for type, records in results.dns.items() %}
+          <p style="margin-bottom:2px;"><strong>{{ type }}</strong>{% if not records %} <span class="muted">— none</span>{% endif %}</p>
+          {% if records %}<ul>{% for r in records %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+        {% endfor %}
+      </div>
+
+      {# ---- WHOIS ---- #}
+      <div class="card" id="sec-whois">
+        <div class="card-h"><span class="hico">{{ ic('file') }}</span><h2>WHOIS</h2><span class="count">registration</span></div>
+        {% if results.whois.error %}
+          <p class="muted">{{ results.whois.error }}</p>
+        {% else %}
+          <table>
+            <tr><td class="key">Registrar</td><td>{{ results.whois.registrar }}</td></tr>
+            <tr><td class="key">Organization</td><td>{{ results.whois.organization }}</td></tr>
+            <tr><td class="key">Created</td><td class="num">{{ results.whois.created }}</td></tr>
+            <tr><td class="key">Expires</td><td class="num">{{ results.whois.expires }}</td></tr>
+            <tr><td class="key">Country</td><td>{{ results.whois.country }}</td></tr>
+          </table>
+        {% endif %}
+      </div>
+
+    {% endif %}
+    </div>
+  </main>
+</div>
+
+<script>
+  const form = document.getElementById('scanForm');
+  const progress = document.getElementById('progress');
+  const fill = document.getElementById('progressFill');
+  const text = document.getElementById('progressText');
+
+  function scanDomain(d) {
+    form.querySelector('[name=domain]').value = d;
+    form.requestSubmit();
+  }
+  window.scanDomain = scanDomain;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    progress.style.display = 'block';
+    fill.style.width = '5%';
+    text.textContent = 'Starting…';
+    const startRes = await fetch('/scan/start', { method: 'POST', body: new FormData(form) });
+    const { job_id } = await startRes.json();
+    const timer = setInterval(async () => {
+      const s = await (await fetch('/scan/status/' + job_id)).json();
+      fill.style.width = (s.percent || 0) + '%';
+      text.textContent = s.stage || '';
+      if (s.done) {
+        clearInterval(timer);
+        if (s.error) { text.textContent = 'Error: ' + s.error; }
+        else { window.location = '/scan/' + s.scan_id; }
+      }
+    }, 500);
+  });
+</script>
+
+{% if results %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script>
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    const reconCharts = [];
+    window.applyChartTheme = function () {
+      const tickC = cssVar('--ink-3'), gridC = cssVar('--border'), textC = cssVar('--ink-2'), surf = cssVar('--surface');
+      Chart.defaults.color = textC;
+      reconCharts.forEach((c) => {
+        if (c.config.type === 'doughnut') c.data.datasets[0].borderColor = surf;
+        if (c.config.type === 'line' && c.options.scales) {
+          c.options.scales.x.ticks.color = tickC; c.options.scales.y.ticks.color = tickC;
+          c.options.scales.x.grid.color = gridC;  c.options.scales.y.grid.color = gridC;
+        }
+        if (c.options.plugins && c.options.plugins.legend) c.options.plugins.legend.labels.color = textC;
+        c.update();
+      });
+    };
+
+    reconCharts.push(new Chart(document.getElementById('findingsChart'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Subdomains', 'Exposed emails', 'DNS records'],
+        datasets: [{
+          data: [
+            {{ results.subdomains | length }},
+            {{ results.emails | length }},
+            {{ results.dns.values() | map('length') | sum }}
+          ],
+          backgroundColor: ['#2563eb', '#c2690a', '#067a4b'],
+          borderColor: cssVar('--surface'), borderWidth: 3, hoverOffset: 6,
+        }]
+      },
+      options: { cutout: '62%', plugins: { legend: { position: 'bottom', labels: { padding: 14, usePointStyle: true, pointStyle: 'circle' } } } }
+    }));
+
+    {% if trend and trend | length >= 2 %}
+    reconCharts.push(new Chart(document.getElementById('trendChart'), {
+      type: 'line',
+      data: {
+        labels: [{% for p in trend %}'{{ p.time }}',{% endfor %}],
+        datasets: [{
+          label: 'Risk score (0–100, lower is better)',
+          data: [{% for p in trend %}{{ p.score if p.score is not none else 'null' }},{% endfor %}],
+          borderColor: '#2563eb', borderWidth: 2, backgroundColor: 'rgba(37,99,235,.1)',
+          pointBackgroundColor: '#2563eb', pointBorderColor: cssVar('--surface'), pointBorderWidth: 2, pointRadius: 4,
+          fill: true, tension: .3, spanGaps: true,
+        }]
+      },
+      options: {
+        scales: {
+          y: { min: 0, max: 100, ticks: { color: cssVar('--ink-3') }, grid: { color: cssVar('--border') } },
+          x: { ticks: { color: cssVar('--ink-3') }, grid: { color: cssVar('--border') } }
+        },
+        plugins: { legend: { labels: { color: cssVar('--ink-2') } } }
+      }
+    }));
+    {% endif %}
+
+    window.applyChartTheme();
+  </script>
+{% endif %}
+</body>
+</html>
